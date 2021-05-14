@@ -1,0 +1,32 @@
+{
+  "name": "nodeboot-rest-starter",
+  "version": "1.0.0-alpha",
+  "description": "npm module to speedup the development of rest application inspired in spring boot framework",
+  "main": "src/main/index.js",
+  "scripts": {
+    "test": "echo \"no yet\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nodeboot/nodeboot-rest-starter"
+  },
+  "keywords": [
+    "npm",
+    "api",
+    "rest",
+    "starter"
+  ],
+  "author": "jrichardsz",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nodeboot/nodeboot-rest-starter/issues"
+  },
+  "homepage": "https://github.com/nodeboot/nodeboot-rest-starter",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "meta-js": "github:jrichardsz/meta-js#1.0.1-pre-alpha",
+    "nodejs-require-enhancer": "github:jrichardsz/nodejs-require-enhancer"
+  }
+}
