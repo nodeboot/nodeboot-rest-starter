@@ -1,8 +1,11 @@
 var express = require('express');
 var cors = require('cors');
 var bodyParser = require('body-parser');
+var finder = require('find-package-json');
 var path = require('path');
-const ConfigurationHelper = require('configuration/ConfigurationHelper.js');
+var fs = require('fs');
+const fsPromises = fs.promises;
+const ConfigurationHelper = require('../configuration/ConfigurationHelper.js');
 
 const MetaJsContextHelper = require('meta-js').MetaJsContextHelper;
 const NodeInternalModulesHook = require('meta-js').NodeInternalModulesHook;
@@ -15,40 +18,53 @@ function RestApplicationStarter(){
   this.instancedDependecies = {};
   this.allowedHttpMethods = ["get","post","delete","put",];
 
-  this.run = (srcLocation) => {
-    var headAnnotations = ["Config","Route"];
-    var internalAnnotations = ["Autowire","Get","Post","Put","Delete", "Configuration"];
-    var dependencies = DependencyHelper.getDependecies(srcLocation, [".js"], ["src/main/Index.js"],headAnnotations, internalAnnotations);
-    console.log(JSON.stringify(dependencies, null,4 ));
+  this.run = async (callerDirectoryLocation) => {
+
+    var f = finder(callerDirectoryLocation);
+    var applicationRootLocation = path.dirname(f.next().filename);
+    console.log("Scanning root location: "+applicationRootLocation);
+
+    var dependencies;
+    var environment = process.env.NODE_ENV
+    if(environment !== 'production'){
+      var headAnnotations = ["Config","Route"];
+      var internalAnnotations = ["Autowire","Get","Post","Put","Delete", "Configuration"];
+      dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], ["src/main/Index.js", ".test.js"],headAnnotations, internalAnnotations);
+      console.log(JSON.stringify(dependencies, null,4 ));
+      await fsPromises.writeFile('meta.json', JSON.stringify(dependencies), 'utf8');
+    }else{
+      dependencies = await fsPromises.readFile('meta.json', 'utf8')
+    }
 
     //store instanced dependencies in nodeboot context
     global.NodebootContext = {
       instancedDependecies : this.instancedDependecies
     }
 
-    this.performInstantation(dependencies);
-    this.addSpecialDependencies(srcLocation);
-    this.loadStarters(path.join(srcLocation, "..", "node_modules"));
-    this.performInjection(dependencies, srcLocation);
+    this.performInstantation(dependencies, applicationRootLocation);
+    this.addSpecialDependencies(applicationRootLocation);
+    this.loadStarters(path.join(applicationRootLocation,"node_modules"));
+    this.performInjection(dependencies);
     this.startServer();
     this.registerRoutesMethods(dependencies);
   }
 
-  this.performInstantation = (dependencies) => {
+  this.performInstantation = (dependencies, applicationRootLocation) => {
     console.log("Perform instantation...");
     for(let dependency of dependencies){
       console.log("Detected dependency:"+dependency.meta.location);
       if(this.instancedDependecies[dependency.meta.arguments.name]){
         console.log("dependency is already instanced");
       }else{
-        var functionRequire = require(dependency.meta.location);
+        var absoluteModuleLocation = path.join(applicationRootLocation, dependency.meta.location);
+        var functionRequire = require(absoluteModuleLocation);
         var functionInstance = new functionRequire();
         this.instancedDependecies[dependency.meta.arguments.name] = functionInstance;
       }
     }
   }
 
-  this.performInjection = (dependencies, srcLocation) => {
+  this.performInjection = (dependencies, applicationRootLocation) => {
 
     console.log("Perform autowire injection...");
     for(let dependency of dependencies){
@@ -68,20 +84,22 @@ function RestApplicationStarter(){
     }
   }
 
-  this.addSpecialDependencies = (srcLocation) => {
+  this.addSpecialDependencies = (applicationRootLocation) => {
     //add custom modules to dependency context
     this.instancedDependecies["express"] = express || {};
 
     //add application.json
     var configurationHelper = new ConfigurationHelper();
-    var configuration = configurationHelper.loadJsonFile(srcLocation+"/main/application.json",'utf8');
+    var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation,"src","main","application.json"),'utf8');
     this.instancedDependecies["configuration"] = configuration || {};
   }
 
   this.startServer = () => {
     this.express.use(bodyParser.urlencoded({extended: false}));
     this.express.use(cors());
-    this.express.listen(process.env.PORT || 8080);
+    let port = process.env.PORT || 8080;
+    console.log("application is listening at port: "+port);
+    this.express.listen(port);
   }
 
   this.registerRoutesMethods = (dependencies) => {
@@ -117,10 +135,10 @@ function RestApplicationStarter(){
          console.log("nodeboot-database-starter was detected. Configuring...");
          const DatabaseStarter = require(rootNodeModulesLocation+"/nodeboot-database-starter");
          var databaseStarter = new DatabaseStarter();
-         var databaseCriteria = databaseStarter.autoConfigure(rootNodeModulesLocation);
-         
-         if(typeof databaseCriteria !== 'undefined'){
-           this.instancedDependecies["databaseCriteria"] = databaseCriteria || {};
+         var dbSession = databaseStarter.autoConfigure(rootNodeModulesLocation);
+
+         if(typeof dbSession !== 'undefined'){
+           this.instancedDependecies["dbSession"] = dbSession || {};
          }
 
       }
