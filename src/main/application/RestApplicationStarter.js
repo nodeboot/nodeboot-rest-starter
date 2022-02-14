@@ -30,7 +30,7 @@ function RestApplicationStarter() {
     var environment = process.env.NODE_ENV
     if (environment !== 'production') {
       var headAnnotations = ["Config", "Route", "Middleware", "ServerInitializer", "Service"];
-      var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration"];
+      var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected"];
       dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], ["src/main/Index.js", ".test.js"], headAnnotations, internalAnnotations);
       console.log(JSON.stringify(dependencies, null, 4));
       await fsPromises.writeFile('meta.json', JSON.stringify(dependencies), 'utf8');
@@ -151,6 +151,7 @@ function RestApplicationStarter() {
       this.express.use(bodyParser.urlencoded({
         extended: false
       }));
+      this.express.use(bodyParser.json());
       this.express.use(cors());
       let port = process.env.PORT || 8080;
       if (typeof callback === 'undefined') {
