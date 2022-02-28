@@ -38,3 +38,5 @@ Basically if the developer add **nodeboot-database-starter** to its package.json
     </td>    
   </tbody>
 </table>
+
+    "meta-js": "git+https://github.com/jrichardsz/meta-js.git#1.0.5-pre-alpha",

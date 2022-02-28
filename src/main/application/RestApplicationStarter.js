@@ -8,6 +8,7 @@ var fs = require('fs');
 const fsPromises = fs.promises;
 const ConfigurationHelper = require('../configuration/ConfigurationHelper.js');
 const ObjectHelper = require('../common/ObjectHelper.js');
+const MetaHelper = require('../common/MetaHelper.js');
 
 const MetaJsContextHelper = require('meta-js').MetaJsContextHelper;
 const NodeInternalModulesHook = require('meta-js').NodeInternalModulesHook;
@@ -18,6 +19,7 @@ function RestApplicationStarter() {
 
   this.express = express();
   this.instancedDependecies = {};
+  this.instancedStarters = {};
   this.allowedHttpMethods = ["get", "post", "delete", "put", ];
 
   this.run = async (callerDirectoryLocation) => {
@@ -44,10 +46,10 @@ function RestApplicationStarter() {
     }
 
     this.performInstantation(dependencies, applicationRootLocation);
-    this.addSpecialDependencies(applicationRootLocation);
+    this.addSpecialInstantations(applicationRootLocation);
+    //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
     this.performInjection(dependencies);
-    await this.registerEjsForSsrPages(applicationRootLocation);
     await this.startServer(dependencies);
     this.registerMiddlewares(dependencies);
     this.registerRoutesMethods(dependencies);
@@ -105,14 +107,24 @@ function RestApplicationStarter() {
     this.express.use(session(clonedConfiguration));
   }
 
-  this.addSpecialDependencies = (applicationRootLocation) => {
+  this.addSpecialInstantations = async (applicationRootLocation) => {
     //add custom modules to dependency context
     this.instancedDependecies["express"] = express || {};
 
     //add application.json
     var configurationHelper = new ConfigurationHelper();
-    var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation, "src", "main", "application.json"), 'utf8');
-    this.instancedDependecies["configuration"] = configuration || {};
+
+    try {
+      await fsPromises.access(path.join(applicationRootLocation, "src", "main", "application.json"));
+      var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation, "src", "main", "application.json"), 'utf8');
+      this.instancedDependecies["configuration"] = configuration || {};
+    } catch (e) {
+      if (e.code != "ENOENT") {
+        console.log("application.json read failed");
+        console.log(e);
+      }
+    }
+
     this.instancedDependecies["rootPath"] = applicationRootLocation;
   }
 
@@ -147,7 +159,9 @@ function RestApplicationStarter() {
   startExpressServer = () => {
 
     return new Promise((resolve, reject) => {
-      this.configureSession();
+      if (ObjectHelper.hasProperty(this.instancedDependecies["configuration"], "nodeboot.session")) {
+        this.configureSession();
+      }
       this.express.use(bodyParser.urlencoded({
         extended: false
       }));
@@ -172,7 +186,7 @@ function RestApplicationStarter() {
     for (let dependency of dependencies) {
       if (dependency.meta.name !== "Route") continue;
 
-      var instanceId = dependency.meta.arguments.name;
+      var instanceId = getInstanceId(dependency);
       var globalRoutePath = dependency.meta.arguments.path;
       console.log(`candidate route: ${instanceId}`);
       //get annotated methods
@@ -201,7 +215,20 @@ function RestApplicationStarter() {
               }
             }
 
-            this.express[method](routeString, this.instancedDependecies[instanceId][functionName]);
+            var iamOauth2ElementaryStarter = this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"];
+            if(typeof iamOauth2ElementaryStarter!== 'undefined'){
+              console.log("nodeboot-iam-oauth2-elementary-starter is ready to be use as middleware");
+              var protectedAnnotation = MetaHelper.findAnnotationOfFunction(dependency, functionName, "Protected");
+              if(typeof protectedAnnotation !== 'undefined'){
+                var permission = protectedAnnotation.arguments.permission
+                if(typeof permission !== 'undefined'){
+                  var securityMiddleware = iamOauth2ElementaryStarter.getSecurityMiddleware(permission)
+                  this.express[method](routeString, securityMiddleware.ensureAuthorization, this.instancedDependecies[instanceId][functionName]);
+                }
+              }
+            }else{
+              this.express[method](routeString, this.instancedDependecies[instanceId][functionName]);
+            }
             console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method}`);
           }
         }
@@ -224,41 +251,69 @@ function RestApplicationStarter() {
 
   this.loadStarters = async (rootNodeModulesLocation) => {
     console.log("[Searching starters]...");
+
     try {
-      if (require.resolve(rootNodeModulesLocation + '/nodeboot-database-starter')) {
-        console.log("nodeboot-database-starter was detected. Configuring...");
-        const DatabaseStarter = require(rootNodeModulesLocation + "/nodeboot-database-starter");
-        var databaseStarter = new DatabaseStarter();
-        var dbSession = await databaseStarter.autoConfigure(rootNodeModulesLocation);
+      await fsPromises.access(path.join(rootNodeModulesLocation, "nodeboot-database-starter"));
+      console.log("nodeboot-database-starter was detected. Configuring...");
+      const DatabaseStarter = require(rootNodeModulesLocation + "/nodeboot-database-starter");
+      var databaseStarter = new DatabaseStarter();
+      var dbSession = await databaseStarter.autoConfigure(rootNodeModulesLocation);
 
-        if (typeof dbSession !== 'undefined') {
-          console.log("dbSession is ready");
-          this.instancedDependecies["dbSession"] = dbSession || {};
-        }
-
+      if (typeof dbSession !== 'undefined') {
+        console.log("dbSession is ready");
+        this.instancedDependecies["dbSession"] = dbSession || {};
       }
-    } catch (err) {
-      console.log(err);
-      if (err.code != "MODULE_NOT_FOUND") {}
+
+      this.instancedStarters["nodeboot-database-starter"] = databaseStarter;
+    } catch (e) {
+      if (e.code != "ENOENT") {
+        console.log("nodeboot-database-starter failed");
+        console.log(e);
+      }
     }
-  }
 
-  //TODO: move to nodeboot-ssr-web-starter
-  this.registerEjsForSsrPages = async (rootNodeModulesLocation) => {
-    console.log("[Registering ejs for ssr webs]...");
+
     try {
-      var esjPagesLocation = path.join(rootNodeModulesLocation, 'src', 'main', 'pages');
-      const stats = await fs.promises.stat(esjPagesLocation);
-      if (typeof stats !== 'undefined') {
-        this.express.set('view engine', 'ejs');
-        this.express.set('views', esjPagesLocation);
-        this.express.engine('html', require('ejs').renderFile);
-      } else {
-        console.log("src/main/pages don't exist");
+      await fsPromises.access(path.join(rootNodeModulesLocation, "nodeboot-web-ssr-starter"));
+      console.log("nodeboot-web-ssr-starter was detected. Configuring...");
+      const WebSsrStarter = require(rootNodeModulesLocation + "/nodeboot-web-ssr-starter");
+      var webSsrStarter = new WebSsrStarter();
+      await webSsrStarter.autoConfigure(this.express);
+      this.instancedStarters["nodeboot-web-ssr-starter"] = webSsrStarter;
+    } catch (e) {
+      if (e.code != "ENOENT") {
+        console.log("nodeboot-web-ssr-starter failed");
+        console.log(e);
       }
-    } catch (err) {
-      console.log("Failed to register ssr web starter");
-      console.log(err);
+    }
+
+    try {
+      await fsPromises.access(path.join(rootNodeModulesLocation, "nodeboot-iam-oauth2-elementary-starter"));
+      console.log("nodeboot-iam-oauth2-elementary-starter was detected. Configuring...");
+
+      if (typeof this.instancedDependecies["dbSession"] === 'undefined') {
+        console.log("nodeboot-iam-oauth2-elementary-starter needs a database connection. Add this starter to do that: nodeboot-database-starter");
+        return;
+      }
+
+      const IamOauth2ElementaryStarter = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").IamOauth2ElementaryStarter;
+      const SubjectDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").SubjectDataService;
+      const IamDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").IamDataService;
+      const DatabaseHelperDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").DatabaseHelperDataService;
+
+      var subjectDataService = new SubjectDataService(this.instancedDependecies["dbSession"]);
+      var iamDataService = new IamDataService(this.instancedDependecies["dbSession"]);
+      var databaseHelperDataService = new DatabaseHelperDataService(this.instancedDependecies["dbSession"]);
+
+      var iamOauth2ElementaryStarter = new IamOauth2ElementaryStarter(this.instancedDependecies["configuration"],
+        subjectDataService, iamDataService, databaseHelperDataService);
+      await iamOauth2ElementaryStarter.autoConfigure();
+      this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"] = iamOauth2ElementaryStarter;
+    } catch (e) {
+      if (e.code != "ENOENT") {
+        console.log("nodeboot-iam-oauth2-elementary-starter failed");
+        console.log(e);
+      }
     }
   }
 

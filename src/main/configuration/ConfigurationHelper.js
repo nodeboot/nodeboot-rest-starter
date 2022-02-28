@@ -11,15 +11,6 @@ function ConfigurationHelper() {
         } else if (obj.hasOwnProperty(k)) {
           var configInitialValue = "" + obj[k];
           if (regex.test(configInitialValue)) {
-            while (regex.test(configInitialValue)) {
-              var startIndex = configInitialValue.indexOf("${") + 2;
-              var endIndex = configInitialValue.indexOf("}");
-              var environmentKey = configInitialValue.substring(startIndex , endIndex - startIndex + 2 );
-              var environmentValue = process.env[environmentKey];
-              if(typeof environmentValue!=='undefined'){
-                configInitialValue = configInitialValue.replace("${" + environmentKey + "}" , environmentValue);
-              }
-            };
             if (configInitialValue != ("" + obj[k]) && configInitialValue!="") {
               if(configInitialValue == "true" || configInitialValue == "false"){
                 var isTrueSet = (configInitialValue === "true");
