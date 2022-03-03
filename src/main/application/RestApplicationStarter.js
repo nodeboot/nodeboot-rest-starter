@@ -47,6 +47,7 @@ function RestApplicationStarter() {
 
     this.performInstantation(dependencies, applicationRootLocation);
     this.addSpecialInstantations(applicationRootLocation);
+    initDefaultsExpressServer();
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
     this.performInjection(dependencies);
@@ -157,16 +158,7 @@ function RestApplicationStarter() {
   }
 
   startExpressServer = () => {
-
     return new Promise((resolve, reject) => {
-      if (ObjectHelper.hasProperty(this.instancedDependecies["configuration"], "nodeboot.session")) {
-        this.configureSession();
-      }
-      this.express.use(bodyParser.urlencoded({
-        extended: false
-      }));
-      this.express.use(bodyParser.json());
-      this.express.use(cors());
       let port = process.env.PORT || 8080;
       if (typeof callback === 'undefined') {
         console.log("application is listening at port: " + port);
@@ -179,6 +171,16 @@ function RestApplicationStarter() {
         });
       }
     });
+  }
+  initDefaultsExpressServer = () => {
+    if (ObjectHelper.hasProperty(this.instancedDependecies["configuration"], "nodeboot.session")) {
+      this.configureSession();
+    }
+    this.express.use(bodyParser.urlencoded({
+      extended: false
+    }));
+    this.express.use(bodyParser.json());
+    this.express.use(cors());
   }
 
   this.registerRoutesMethods = (dependencies) => {
@@ -224,12 +226,13 @@ function RestApplicationStarter() {
                 if(typeof permission !== 'undefined'){
                   var securityMiddleware = iamOauth2ElementaryStarter.getSecurityMiddleware(permission)
                   this.express[method](routeString, securityMiddleware.ensureAuthorization, this.instancedDependecies[instanceId][functionName]);
+                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} protected:${permission}`);
                 }
               }
             }else{
               this.express[method](routeString, this.instancedDependecies[instanceId][functionName]);
+              console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method}`);
             }
-            console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method}`);
           }
         }
       }
@@ -306,7 +309,7 @@ function RestApplicationStarter() {
       var databaseHelperDataService = new DatabaseHelperDataService(this.instancedDependecies["dbSession"]);
 
       var iamOauth2ElementaryStarter = new IamOauth2ElementaryStarter(this.instancedDependecies["configuration"],
-        subjectDataService, iamDataService, databaseHelperDataService);
+        subjectDataService, iamDataService, databaseHelperDataService, this.express);
       await iamOauth2ElementaryStarter.autoConfigure();
       this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"] = iamOauth2ElementaryStarter;
     } catch (e) {
