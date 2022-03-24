@@ -217,11 +217,13 @@ function RestApplicationStarter() {
               }
             }
 
-            var iamOauth2ElementaryStarter = this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"];
-            if(typeof iamOauth2ElementaryStarter!== 'undefined'){
-              console.log("nodeboot-iam-oauth2-elementary-starter is ready to be use as middleware");
-              var protectedAnnotation = MetaHelper.findAnnotationOfFunction(dependency, functionName, "Protected");
-              if(typeof protectedAnnotation !== 'undefined'){
+            var protectedAnnotation = MetaHelper.findAnnotationOfFunction(dependency, functionName, "Protected");
+            if(typeof protectedAnnotation !== 'undefined'){
+
+              var iamOauth2ElementaryStarter = this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"];
+              if(typeof iamOauth2ElementaryStarter=== 'undefined'){
+                console.log(`route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} has @Protected annotation but nodeboot-iam-oauth2-elementary-starter is null `);
+              }else{
                 var permission = protectedAnnotation.arguments.permission
                 if(typeof permission !== 'undefined'){
                   var securityMiddleware = iamOauth2ElementaryStarter.getSecurityMiddleware(permission)
