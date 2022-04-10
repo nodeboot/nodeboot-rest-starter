@@ -195,12 +195,13 @@ function RestApplicationStarter() {
       for (let functionName in dependency.functions) {
         var annotations = dependency.functions[functionName];
         for (let annotation of annotations) {
-          if (typeof annotation.name !== 'undefined' && typeof annotation.arguments.path !== 'undefined') {
+          if (typeof annotation.name !== 'undefined' && typeof annotation.arguments.path !== 'undefined' && this.allowedHttpMethods.includes(annotation.name.toLowerCase())) {
+            console.log(`annotation.name: ${annotation.name}`);
             var method = annotation.name.toLowerCase();
-            if (this.allowedHttpMethods.includes(method) < 0) {
-              console.log(`http method not allowed: ${method} in ${functionName}`);
-              continue;
-            }
+            // if (this.allowedHttpMethods.includes(method) < 0) {
+            //   console.log(`http method not allowed: ${method} in ${functionName}`);
+            //   continue;
+            // }
             var routeString;
             if (typeof globalRoutePath !== 'undefined') {
               if (typeof annotation.arguments.path !== 'undefined') {
@@ -228,7 +229,7 @@ function RestApplicationStarter() {
                 if(typeof permission !== 'undefined'){
                   var securityMiddleware = iamOauth2ElementaryStarter.getSecurityMiddleware(permission)
                   this.express[method](routeString, securityMiddleware.ensureAuthorization, this.instancedDependecies[instanceId][functionName]);
-                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} protected:${permission}`);
+                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} protected: ${permission}`);
                 }
               }
             }else{
