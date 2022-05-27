@@ -8,12 +8,8 @@ MetaHelper.findAnnotationByLocationAndFunctionName = function(dependencies, loca
   }
 };
 MetaHelper.findAnnotationOfFunction = function(dependency, functionName, annotationName) {
-  // console.log(dependency);
-  // console.log(dependency.functions);
   var annotations = dependency.functions[functionName];
-  // console.log(annotations);
   for(annotation of annotations){
-    // console.log(annotation);
     if(annotation.name == annotationName){
       return annotation;
     }
