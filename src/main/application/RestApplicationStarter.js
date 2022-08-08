@@ -22,9 +22,9 @@ function RestApplicationStarter() {
   this.instancedStarters = {};
   this.allowedHttpMethods = ["get", "post", "delete", "put", ];
 
-  this.run = async (callerDirectoryLocation) => {
+  this.run = async (params) => {
 
-    var f = finder(callerDirectoryLocation);
+    var f = finder( params.callerDirectoryLocation);
     var applicationRootLocation = path.dirname(f.next().filename);
     console.log("Scanning root location: " + applicationRootLocation);
 
@@ -33,7 +33,7 @@ function RestApplicationStarter() {
     if (environment !== 'production') {
       var headAnnotations = ["Config", "Route", "Middleware", "ServerInitializer", "Service"];
       var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected"];
-      dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], ["src/main/Index.js", ".test.js"], headAnnotations, internalAnnotations);
+      dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], [params.entrypointRelativeLocation, ".test.js"], headAnnotations, internalAnnotations);
       console.log(JSON.stringify(dependencies, null, 4));
       await fsPromises.writeFile('meta.json', JSON.stringify(dependencies), 'utf8');
     } else {
@@ -46,8 +46,8 @@ function RestApplicationStarter() {
     }
 
     this.performInstantation(dependencies, applicationRootLocation);
-    this.addSpecialInstantations(applicationRootLocation);
-    initDefaultsExpressServer();
+    this.addSpecialInstantations(applicationRootLocation, params);
+    initDefaultsExpressServer(params);
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
     this.performInjection(dependencies);
@@ -108,7 +108,7 @@ function RestApplicationStarter() {
     this.express.use(session(clonedConfiguration));
   }
 
-  this.addSpecialInstantations = async (applicationRootLocation) => {
+  this.addSpecialInstantations = async (applicationRootLocation, params) => {
     //add custom modules to dependency context
     this.instancedDependecies["express"] = express || {};
 
@@ -116,12 +116,13 @@ function RestApplicationStarter() {
     var configurationHelper = new ConfigurationHelper();
 
     try {
-      await fsPromises.access(path.join(applicationRootLocation, "src", "main", "application.json"));
-      var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation, "src", "main", "application.json"), 'utf8');
+      console.log(params.configRelativeLocation)
+      await fsPromises.access(path.join(applicationRootLocation, params.configRelativeLocation));
+      var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation,params.configRelativeLocation), 'utf8');
       this.instancedDependecies["configuration"] = configuration || {};
     } catch (e) {
       if (e.code != "ENOENT") {
-        console.log("application.json read failed");
+        console.log(params.configRelativeLocation+" cannot be readed");
         console.log(e);
       }
     }
@@ -172,14 +173,19 @@ function RestApplicationStarter() {
       }
     });
   }
-  initDefaultsExpressServer = () => {
+  initDefaultsExpressServer = (params) => {
     if (ObjectHelper.hasProperty(this.instancedDependecies["configuration"], "nodeboot.session")) {
       this.configureSession();
     }
-    this.express.use(bodyParser.urlencoded({
-      extended: false
-    }));
-    this.express.use(bodyParser.json());
+
+    if (typeof params.customBodyParser === 'function') {
+      params.customBodyParser(this.express);
+    }else{
+      this.express.use(bodyParser.urlencoded({
+        extended: false
+      }));
+      this.express.use(bodyParser.json());
+    }    
     this.express.use(cors());
   }
 
