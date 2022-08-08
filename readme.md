@@ -13,7 +13,41 @@ const restApplicationStarter = new RestApplicationStarter();
 restApplicationStarter.run(__dirname);
 ```
 
-Basically if the developer add **nodeboot-database-starter** to its package.json, **nodeboot-rest-starter** will detect it and starts the auto configuration
+An application.json like
+
+```
+{
+  "nodeboot": {
+    "database": {
+      "client": "mysql",
+      "connection": {
+        "host": "192.168.111.222",
+        "user": "root",
+        "password": "secret",
+        "database": "acme_db",
+        "multipleStatements": true
+      }
+    },
+    "iam_oauth2_elementary_starter":{
+      "jwtSecret":"changeme",
+      "jwtExpiration":"3600s"
+    }
+  }
+}
+```
+
+And the starters:
+
+```
+"dependencies": {
+  "...",
+  "nodeboot-database-starter": "file:../nodeboot-database-starter",
+  "nodeboot-iam-oauth2-elementary-starter": "file:../../../../../../home/jrichardsz/Github/nodeboot-iam-oauth2-elementary-starter",
+  "nodeboot-rest-starter": "file:../nodeboot-rest-starter"
+},
+```
+
+Basically if the developer add **nodeboot-database-starter** to its package.json, **nodeboot-rest-starter** will detect it and auto configuration: database and oauth2 on the fly for you!!
 
 ## Road map
 
