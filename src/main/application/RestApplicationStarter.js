@@ -34,7 +34,9 @@ function RestApplicationStarter() {
       var headAnnotations = ["Config", "Route", "Middleware", "ServerInitializer", "Service"];
       var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected"];
       dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], [params.entrypointRelativeLocation, ".test.js"], headAnnotations, internalAnnotations);
-      console.log(JSON.stringify(dependencies, null, 4));
+      if(typeof params.printDependencies !== 'undefined' && params.printDependencies === true){
+        console.log(JSON.stringify(dependencies, null, 4));
+      }  
       await fsPromises.writeFile('meta.json', JSON.stringify(dependencies), 'utf8');
     } else {
       dependencies = await fsPromises.readFile('meta.json', 'utf8')
@@ -46,7 +48,7 @@ function RestApplicationStarter() {
     }
 
     this.performInstantation(dependencies, applicationRootLocation);
-    this.addSpecialInstantations(applicationRootLocation, params);
+    await this.addSpecialInstantations(applicationRootLocation, params);
     initDefaultsExpressServer(params);
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
@@ -66,8 +68,8 @@ function RestApplicationStarter() {
         var absoluteModuleLocation = path.join(applicationRootLocation, dependency.meta.location);
         var functionRequire = require(absoluteModuleLocation);
         var functionInstance = new functionRequire();
-        console.log("instantiating dependency: " + dependency.meta.location + " with id: " + instanceId);
         this.instancedDependecies[instanceId] = functionInstance;
+        console.log("dependency instantiated: " + dependency.meta.location + " with id: " + instanceId);
       }
     }
   }
@@ -110,15 +112,18 @@ function RestApplicationStarter() {
 
   this.addSpecialInstantations = async (applicationRootLocation, params) => {
     //add custom modules to dependency context
+    console.log("[Special instantances]")
     this.instancedDependecies["express"] = express || {};
+    console.log("dependency instantiated: express with id: express");
 
     //add application.json
     var configurationHelper = new ConfigurationHelper();
 
     try {
-      console.log(params.configRelativeLocation)
+      console.log("loading: "+params.configRelativeLocation)
       await fsPromises.access(path.join(applicationRootLocation, params.configRelativeLocation));
-      var configuration = configurationHelper.loadJsonFile(path.join(applicationRootLocation,params.configRelativeLocation), 'utf8');
+      var configuration = await configurationHelper.loadJsonFile(path.join(applicationRootLocation,params.configRelativeLocation), 'utf8');
+      console.log("dependency instantiated: appliction.json with id: configuration");
       this.instancedDependecies["configuration"] = configuration || {};
     } catch (e) {
       if (e.code != "ENOENT") {
@@ -160,7 +165,7 @@ function RestApplicationStarter() {
 
   startExpressServer = () => {
     return new Promise((resolve, reject) => {
-      let port = process.env.PORT || 8080;
+      let port = process.env.PORT || 2104;
       if (typeof callback === 'undefined') {
         console.log("application is listening at port: " + port);
         this.express.listen(port);
@@ -196,13 +201,13 @@ function RestApplicationStarter() {
 
       var instanceId = getInstanceId(dependency);
       var globalRoutePath = dependency.meta.arguments.path;
-      console.log(`candidate route: ${instanceId}`);
+      console.log(`@Route found: ${instanceId}`);
       //get annotated methods
       for (let functionName in dependency.functions) {
         var annotations = dependency.functions[functionName];
         for (let annotation of annotations) {
           if (typeof annotation.name !== 'undefined' && typeof annotation.arguments.path !== 'undefined' && this.allowedHttpMethods.includes(annotation.name.toLowerCase())) {
-            console.log(`annotation.name: ${annotation.name}`);
+            console.log(`method found: ${annotation.name}`);
             var method = annotation.name.toLowerCase();
             // if (this.allowedHttpMethods.includes(method) < 0) {
             //   console.log(`http method not allowed: ${method} in ${functionName}`);
@@ -239,6 +244,7 @@ function RestApplicationStarter() {
                 }
               }
             }else{
+              //@TODO detect already string route added
               this.express[method](routeString, this.instancedDependecies[instanceId][functionName]);
               console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method}`);
             }
