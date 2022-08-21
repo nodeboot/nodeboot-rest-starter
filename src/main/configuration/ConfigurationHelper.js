@@ -11,7 +11,14 @@ function ConfigurationHelper() {
         } else if (obj.hasOwnProperty(k)) {
           var configInitialValue = "" + obj[k];
           if (regex.test(configInitialValue)) {
+            var prevetLoop = 0;
             while (regex.test(configInitialValue)) {
+
+              if(prevetLoop>10){
+                console.log("Max iterations rached while this key was being extracted: "+configInitialValue);
+                throw new Error("Max iterations rached while this key was being extracted: "+configInitialValue);
+              }
+
               var startIndex = configInitialValue.indexOf("${") + 2;
               var endIndex = configInitialValue.indexOf("}");
               var environmentKey = configInitialValue.substring(startIndex , endIndex - startIndex + 2 );
@@ -19,6 +26,8 @@ function ConfigurationHelper() {
               if(typeof environmentValue!=='undefined'){
                 configInitialValue = configInitialValue.replace("${" + environmentKey + "}" , environmentValue);
               }
+
+              prevetLoop++;
             };
             if (configInitialValue != ("" + obj[k]) && configInitialValue!="") {
               if(configInitialValue == "true" || configInitialValue == "false"){

@@ -31,7 +31,7 @@ function RestApplicationStarter() {
     var dependencies;
     var environment = process.env.NODE_ENV
     if (environment !== 'production') {
-      var headAnnotations = ["Config", "Route", "Middleware", "ServerInitializer", "Service"];
+      var headAnnotations = ["Config", "Route", "PreMiddleware","PostMiddleware", "ServerInitializer", "Service"];
       var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected"];
       dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], [params.entrypointRelativeLocation, ".test.js"], headAnnotations, internalAnnotations);
       if(typeof params.printDependencies !== 'undefined' && params.printDependencies === true){
@@ -54,8 +54,9 @@ function RestApplicationStarter() {
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
     this.performInjection(dependencies);
     await this.startServer(dependencies);
-    this.registerMiddlewares(dependencies);
+    this.registerPreMiddlewares(dependencies);
     this.registerRoutesMethods(dependencies);
+    this.registerPostMiddlewares(dependencies);
   }
 
   this.performInstantation = (dependencies, applicationRootLocation) => {
@@ -124,12 +125,23 @@ function RestApplicationStarter() {
       await fsPromises.access(path.join(applicationRootLocation, params.configRelativeLocation));
       var configuration = await configurationHelper.loadJsonFile(path.join(applicationRootLocation,params.configRelativeLocation), 'utf8');
       console.log("dependency instantiated: appliction.json with id: configuration");
+      
+      configuration = { ...configuration,
+          getProperty: function(key) {
+            try {
+                return key.split(".").reduce((result, key) => {
+                    return result[key]
+                }, this);
+            } catch (err) {
+                console.log(key + " cannot be retrieved from configuration!!!")
+            }
+          }
+      };
       this.instancedDependecies["configuration"] = configuration || {};
+
     } catch (e) {
-      if (e.code != "ENOENT") {
-        console.log(params.configRelativeLocation+" cannot be readed");
-        console.log(e);
-      }
+      //TODO: stop the start when application has an error
+      throw new Error(params.configRelativeLocation+" cannot be readed", e)
     }
 
     this.instancedDependecies["rootPath"] = applicationRootLocation;
@@ -254,16 +266,32 @@ function RestApplicationStarter() {
     }
   }
 
-  this.registerMiddlewares = (dependencies) => {
-    console.log("[Register middlewares]...");
+  //TODO: add order
+  this.registerPreMiddlewares = (dependencies) => {
+    console.log("[Register pre-middlewares]...");
     for (let dependency of dependencies) {
-      if (dependency.meta.name !== "Middleware") continue;
+      if (dependency.meta.name !== "PreMiddleware") continue;
       let instanceId = getInstanceId(dependency);
       if (typeof this.instancedDependecies[instanceId]['dispatch'] === 'undefined') {
         console.log(`Middleware ${instanceId} don't have a dispatch function. Register is skipped.`);
         continue;
       }
       this.express.use(this.instancedDependecies[instanceId]['dispatch']);
+    }
+  }
+
+  //TODO: add order
+  this.registerPostMiddlewares = (dependencies) => {
+    console.log("[Register post-middlewares]...");
+    for (let dependency of dependencies) {
+      if (dependency.meta.name !== "PostMiddleware") continue;
+      let instanceId = getInstanceId(dependency);
+      if (typeof this.instancedDependecies[instanceId]['dispatch'] === 'undefined') {
+        console.log(`Middleware ${instanceId} don't have a dispatch function. Register is skipped.`);
+        continue;
+      }
+      this.express.use(this.instancedDependecies[instanceId]['dispatch']);
+      console.log(`registered middleware ${instanceId}`);
     }
   }
 
@@ -327,6 +355,8 @@ function RestApplicationStarter() {
         subjectDataService, iamDataService, databaseHelperDataService, this.express);
       await iamOauth2ElementaryStarter.autoConfigure();
       this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"] = iamOauth2ElementaryStarter;
+      //to allow direct injections
+      this.instancedDependecies["elementaryOauth2SpecService"] = iamOauth2ElementaryStarter.getOauth2SpecService()
     } catch (e) {
       if (e.code != "ENOENT") {
         console.log("nodeboot-iam-oauth2-elementary-starter failed");
