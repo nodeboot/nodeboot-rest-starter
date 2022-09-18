@@ -252,7 +252,7 @@ function RestApplicationStarter() {
                 if(typeof permission !== 'undefined'){
                   var securityMiddleware = iamOauth2ElementaryStarter.getSecurityMiddleware(permission)
                   this.express[method](routeString, securityMiddleware.ensureAuthorization, this.instancedDependecies[instanceId][functionName]);
-                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} protected: ${permission}`);
+                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} permission: ${permission}`);
                 }
               }
             }else{
@@ -357,6 +357,8 @@ function RestApplicationStarter() {
       this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"] = iamOauth2ElementaryStarter;
       //to allow direct injections
       this.instancedDependecies["elementaryOauth2SpecService"] = iamOauth2ElementaryStarter.getOauth2SpecService()
+      this.instancedDependecies["subjectDataService"] = subjectDataService;
+      this.instancedDependecies["iamDataService"] = iamDataService;
     } catch (e) {
       if (e.code != "ENOENT") {
         console.log("nodeboot-iam-oauth2-elementary-starter failed");
