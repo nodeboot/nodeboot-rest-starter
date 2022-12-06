@@ -114,7 +114,7 @@ function RestApplicationStarter() {
   this.addSpecialInstantations = async (applicationRootLocation, params) => {
     //add custom modules to dependency context
     console.log("[Special instantances]")
-    this.instancedDependecies["express"] = express || {};
+    this.instancedDependecies["express"] = this.express || {};
     console.log("dependency instantiated: express with id: express");
 
     //add application.json
