@@ -1,6 +1,6 @@
 {
   "name": "nodeboot-rest-starter",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "npm module to speedup the development of rest application inspired in spring boot framework",
   "main": "src/main/index.js",
   "scripts": {

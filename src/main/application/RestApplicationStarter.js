@@ -48,7 +48,7 @@ function RestApplicationStarter() {
     }
 
     this.performInstantation(dependencies, applicationRootLocation);
-    await this.addSpecialInstantations(applicationRootLocation, params);
+    await this.addSpecialInstantations(applicationRootLocation, params, dependencies);
     initDefaultsExpressServer(params);
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
@@ -111,7 +111,7 @@ function RestApplicationStarter() {
     this.express.use(session(clonedConfiguration));
   }
 
-  this.addSpecialInstantations = async (applicationRootLocation, params) => {
+  this.addSpecialInstantations = async (applicationRootLocation, params, dependencies) => {
     //add custom modules to dependency context
     console.log("[Special instantances]")
     this.instancedDependecies["express"] = this.express || {};
@@ -135,16 +135,27 @@ function RestApplicationStarter() {
             } catch (err) {
                 console.log(key + " cannot be retrieved from configuration!!!")
             }
-          }
+          },
+          hasProperty: function(key) {
+            try {
+                var value = key.split(".").reduce((result, key) => {
+                    return result[key]
+                }, this);
+                return (typeof value !== 'undefined')
+            } catch (err) {
+                return false;
+            }
+          }          
       };
       this.instancedDependecies["configuration"] = configuration || {};
 
     } catch (e) {
       //TODO: stop the start when application has an error
-      throw new Error(params.configRelativeLocation+" cannot be readed", e)
+      throw new Error(params.configRelativeLocation+" cannot be read", e)
     }
 
     this.instancedDependecies["rootPath"] = applicationRootLocation;
+    this.instancedDependecies["rawDependencies"] = dependencies;
   }
 
   this.startServer = async (dependencies) => {
@@ -246,7 +257,9 @@ function RestApplicationStarter() {
 
               var iamOauth2ElementaryStarter = this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"];
               if(typeof iamOauth2ElementaryStarter=== 'undefined'){
-                console.log(`route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} has @Protected annotation but nodeboot-iam-oauth2-elementary-starter is null `);
+                console.debug(`route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} has @Protected annotation but nodeboot-iam-oauth2-elementary-starter is null. @Protected will be ignored`);
+                this.express[method](routeString, this.instancedDependecies[instanceId][functionName]);
+                  console.log(`registered route: ${instanceId}.${functionName} endpoint:${routeString} method:${method} permission: ${permission}`);
               }else{
                 var permission = protectedAnnotation.arguments.permission
                 if(typeof permission !== 'undefined'){
@@ -314,7 +327,7 @@ function RestApplicationStarter() {
     } catch (e) {
       if (e.code != "ENOENT") {
         console.log("nodeboot-database-starter failed");
-        console.log(e);
+        throw e;
       }
     }
 
