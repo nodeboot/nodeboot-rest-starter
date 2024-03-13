@@ -31,8 +31,8 @@ function RestApplicationStarter() {
     var dependencies;
     var environment = process.env.NODE_ENV
     if (environment !== 'production') {
-      var headAnnotations = ["Config", "Route", "PreMiddleware","PostMiddleware", "ServerInitializer", "Service"];
-      var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected"];
+      var headAnnotations = ["Config", "Route", "PreMiddleware","PostMiddleware", "ServerInitializer", "Service", "SocketIoController"];
+      var internalAnnotations = ["Autowire", "Get", "Post", "Put", "Delete", "Configuration", "Protected", "SocketIoEvent", "SocketIoErrorHandler"];
       dependencies = DependencyHelper.getDependecies(applicationRootLocation, [".js"], [params.entrypointRelativeLocation, ".test.js"], headAnnotations, internalAnnotations);
       if(typeof params.printDependencies !== 'undefined' && params.printDependencies === true){
         console.log(JSON.stringify(dependencies, null, 4));
@@ -51,12 +51,14 @@ function RestApplicationStarter() {
     await this.addSpecialInstantations(applicationRootLocation, params, dependencies);
     initDefaultsExpressServer(params);
     //load starter before injection because some starters creates special dependencies
-    await this.loadStarters(path.join(applicationRootLocation, "node_modules"));
+    await this.loadStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
     this.performInjection(dependencies);
-    await this.startServer(dependencies);
+    var expressLiveServer = await this.startServer(dependencies);
+    this.instancedDependecies["expressLiveServer"] = expressLiveServer;
     this.registerPreMiddlewares(dependencies);
     this.registerRoutesMethods(dependencies);
     this.registerPostMiddlewares(dependencies);
+    await this.loadPostStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
   }
 
   this.performInstantation = (dependencies, applicationRootLocation) => {
@@ -160,6 +162,7 @@ function RestApplicationStarter() {
 
   this.startServer = async (dependencies) => {
     console.log("[Starting express server]...");
+    var expressLiveServer;
     var instanceId;
     for (let dependency of dependencies) {
       if (dependency.meta.name !== "ServerInitializer") continue;
@@ -168,8 +171,8 @@ function RestApplicationStarter() {
       break;
     }
     if (typeof instanceId === 'undefined') {
-      await startExpressServer();
-      return;
+      expressLiveServer = await startExpressServer();
+      return expressLiveServer;
     }
     //TODO https://blog.logrocket.com/improve-async-programming-with-javascript-promises/
     // research how to make onBeforeLoad (simple) async and promise
@@ -178,22 +181,24 @@ function RestApplicationStarter() {
     if (typeof serverInitializer.onBeforeLoad !== 'undefined') {
       await serverInitializer.onBeforeLoad();
       if (typeof serverInitializer.onAfterLoad !== 'undefined') {
-        await startExpressServer();
+        expressLiveServer = await startExpressServer();
         await serverInitializer.onAfterLoad()
       } else {
-        await startExpressServer();
+        expressLiveServer = await startExpressServer();
       }
     }
   }
 
-  startExpressServer = () => {
+  startExpressServer = (callback) => {
     return new Promise((resolve, reject) => {
+      var expressLiveServer;
       let port = process.env.PORT || 2104;
       if (typeof callback === 'undefined') {
         console.log("application is listening at port: " + port);
-        this.express.listen(port);
-        resolve();
+        expressLiveServer = this.express.listen(port);
+        resolve(expressLiveServer);
       } else {
+        //TODO: get the expressLiveServer reference
         this.express.listen(port, () => {
           console.log("application is listening at port: " + port);
           resolve();
@@ -308,7 +313,25 @@ function RestApplicationStarter() {
     }
   }
 
-  this.loadStarters = async (rootNodeModulesLocation) => {
+  this.loadPostStarters = async (rootNodeModulesLocation, rawDependencies) => {
+    console.log("[Searching post starters]...");
+
+    try {
+      await fsPromises.access(path.join(rootNodeModulesLocation, "nodeboot-socket-io-starter"));
+      const SocketIoStarter = require(rootNodeModulesLocation + "/nodeboot-socket-io-starter");
+      var socketIoStarter = new SocketIoStarter();
+      await socketIoStarter.autoConfigure(rawDependencies);
+      this.instancedStarters["nodeboot-socket-io-starter"] = socketIoStarter;
+    } catch (e) {
+      if (e.code != "ENOENT") {
+        console.log("nodeboot-socket-io-starter failed");
+        throw e;
+      }
+    }
+
+  }  
+
+  this.loadStarters = async (rootNodeModulesLocation, rawDependencies) => {
     console.log("[Searching starters]...");
 
     try {
