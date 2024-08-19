@@ -295,6 +295,7 @@ function RestApplicationStarter() {
         continue;
       }
       this.express.use(this.instancedDependecies[instanceId]['dispatch']);
+      console.log(`registered middleware ${instanceId}`);
     }
   }
 
