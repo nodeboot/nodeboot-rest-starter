@@ -29,7 +29,10 @@
     "express": "^4.17.1",
     "express-session": "^1.17.2",
     "find-package-json": "^1.2.0",
+    "install": "^0.13.0",
     "meta-js": "git+https://github.com/jrichardsz/meta-js.git#1.0.6-pre-alpha",
+    "node-schedule": "^2.1.1",
+    "npm": "^11.2.0",
     "uuid": "^8.3.2"
   }
 }

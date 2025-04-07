@@ -9,11 +9,13 @@ const fsPromises = fs.promises;
 const ConfigurationHelper = require('../configuration/ConfigurationHelper.js');
 const ObjectHelper = require('../common/ObjectHelper.js');
 const MetaHelper = require('../common/MetaHelper.js');
+const HttpProtector = require("./HttpProtector.js");
 
 const MetaJsContextHelper = require('meta-js').MetaJsContextHelper;
 const NodeInternalModulesHook = require('meta-js').NodeInternalModulesHook;
 NodeInternalModulesHook._compile();
 const DependencyHelper = require('meta-js').DependencyHelper;
+const httpProtector = new HttpProtector();
 
 function RestApplicationStarter() {
 
@@ -50,14 +52,19 @@ function RestApplicationStarter() {
     this.performInstantation(dependencies, applicationRootLocation);
     await this.addSpecialInstantations(applicationRootLocation, params, dependencies);
     initDefaultsExpressServer(params);
+
+    //default fba and ddos attack protection
+    this.express.use(httpProtector.middleware);
+
+    //load middlewares at the begining 
+    this.registerPreMiddlewares(dependencies);
+    this.registerPostMiddlewares(dependencies);
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
     this.performInjection(dependencies);
     var expressLiveServer = await this.startServer(dependencies);
-    this.instancedDependecies["expressLiveServer"] = expressLiveServer;
-    this.registerPreMiddlewares(dependencies);
-    this.registerRoutesMethods(dependencies);
-    this.registerPostMiddlewares(dependencies);
+    this.instancedDependecies["expressLiveServer"] = expressLiveServer;    
+    this.registerRoutesMethods(dependencies);    
     await this.loadPostStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
   }
 
