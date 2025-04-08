@@ -54,7 +54,9 @@ function RestApplicationStarter() {
     initDefaultsExpressServer(params);
 
     //default fba and ddos attack protection
-    this.express.use(httpProtector.middleware);
+    if(this.instancedDependecies["configuration"].getProperty("enableHttpProtector")===true){
+      this.express.use(httpProtector.middleware);
+    }
 
     //load middlewares at the begining 
     this.registerPreMiddlewares(dependencies);
