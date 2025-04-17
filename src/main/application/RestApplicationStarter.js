@@ -10,12 +10,12 @@ const ConfigurationHelper = require('../configuration/ConfigurationHelper.js');
 const ObjectHelper = require('../common/ObjectHelper.js');
 const MetaHelper = require('../common/MetaHelper.js');
 const HttpProtector = require("./HttpProtector.js");
+const SelfMaintenance = require("./SelfMaintenance.js");
 
 const MetaJsContextHelper = require('meta-js').MetaJsContextHelper;
 const NodeInternalModulesHook = require('meta-js').NodeInternalModulesHook;
 NodeInternalModulesHook._compile();
 const DependencyHelper = require('meta-js').DependencyHelper;
-const httpProtector = new HttpProtector();
 
 function RestApplicationStarter() {
 
@@ -23,6 +23,8 @@ function RestApplicationStarter() {
   this.instancedDependecies = {};
   this.instancedStarters = {};
   this.allowedHttpMethods = ["get", "post", "delete", "put", ];
+
+  const selfMaintenance = new SelfMaintenance(this.instancedDependecies);
 
   this.run = async (params) => {
 
@@ -68,6 +70,10 @@ function RestApplicationStarter() {
     this.instancedDependecies["expressLiveServer"] = expressLiveServer;    
     this.registerRoutesMethods(dependencies);    
     await this.loadPostStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
+
+    //self maintenance
+    selfMaintenance.start();
+    
   }
 
   this.performInstantation = (dependencies, applicationRootLocation) => {
@@ -124,7 +130,7 @@ function RestApplicationStarter() {
 
   this.addSpecialInstantations = async (applicationRootLocation, params, dependencies) => {
     //add custom modules to dependency context
-    console.log("[Special instantances]")
+    console.log("[Special instances]")
     this.instancedDependecies["express"] = this.express || {};
     console.log("dependency instantiated: express with id: express");
 
@@ -339,10 +345,12 @@ function RestApplicationStarter() {
       }
     }
 
+    console.log("[Searching post starters : completed]...");
+
   }  
 
   this.loadStarters = async (rootNodeModulesLocation, rawDependencies) => {
-    console.log("[Searching starters]...");
+    console.log("[Searching pre starters]...");
 
     try {
       await fsPromises.access(path.join(rootNodeModulesLocation, "nodeboot-database-starter"));
@@ -392,7 +400,7 @@ function RestApplicationStarter() {
       const SubjectDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").SubjectDataService;
       const IamDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").IamDataService;
       const DatabaseHelperDataService = require(rootNodeModulesLocation + "/nodeboot-iam-oauth2-elementary-starter").DatabaseHelperDataService;
-
+      
       var subjectDataService = new SubjectDataService(this.instancedDependecies["dbSession"]);
       var iamDataService = new IamDataService(this.instancedDependecies["dbSession"]);
       var databaseHelperDataService = new DatabaseHelperDataService(this.instancedDependecies["dbSession"]);
@@ -402,7 +410,7 @@ function RestApplicationStarter() {
       await iamOauth2ElementaryStarter.autoConfigure();
       this.instancedStarters["nodeboot-iam-oauth2-elementary-starter"] = iamOauth2ElementaryStarter;
       //to allow direct injections
-      this.instancedDependecies["elementaryOauth2SpecService"] = iamOauth2ElementaryStarter.getOauth2SpecService()
+      this.instancedDependecies["oauth2SpecService"] = iamOauth2ElementaryStarter.getOauth2SpecService()
       this.instancedDependecies["subjectDataService"] = subjectDataService;
       this.instancedDependecies["iamDataService"] = iamDataService;
     } catch (e) {
@@ -411,6 +419,8 @@ function RestApplicationStarter() {
         console.log(e);
       }
     }
+
+    console.log("[Searching pre starters : completed]");
   }
 
   getInstanceId = (dependency) => {
