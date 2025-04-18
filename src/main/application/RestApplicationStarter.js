@@ -73,6 +73,9 @@ function RestApplicationStarter() {
 
     //self maintenance
     selfMaintenance.start();
+
+    //hardening
+    this.hardening();
     
   }
 
@@ -431,6 +434,11 @@ function RestApplicationStarter() {
       return fileNameWithoutExt.charAt(0).toLowerCase() + fileNameWithoutExt.slice(1);
     }
   }
+
+  this.hardening = async () => {
+    this.express.disable('x-powered-by')
+  }  
+
 }
 
 module.exports = RestApplicationStarter;
