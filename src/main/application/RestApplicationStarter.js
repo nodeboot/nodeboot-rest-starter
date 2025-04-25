@@ -62,7 +62,7 @@ function RestApplicationStarter() {
 
     //load middlewares at the begining 
     this.registerPreMiddlewares(dependencies);
-    this.registerPostMiddlewares(dependencies);
+
     //load starter before injection because some starters creates special dependencies
     await this.loadStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
     this.performInjection(dependencies);
@@ -70,6 +70,9 @@ function RestApplicationStarter() {
     this.instancedDependecies["expressLiveServer"] = expressLiveServer;    
     this.registerRoutesMethods(dependencies);    
     await this.loadPostStarters(path.join(applicationRootLocation, "node_modules"), dependencies);
+
+    //set end middlewares
+    this.registerPostMiddlewares(dependencies);
 
     //self maintenance
     selfMaintenance.start();
